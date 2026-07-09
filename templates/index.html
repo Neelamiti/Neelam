@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Health Data Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --border: #e5e7eb;
+    --very-low: #10b981;
+    --low: #3b82f6;
+    --medium: #f59e0b;
+    --high: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 32px 64px; }
+
+  .filters {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .filters label {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    color: var(--muted);
+    gap: 4px;
+  }
+  select {
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    min-width: 140px;
+  }
+  .record-count {
+    margin-left: auto;
+    font-size: 14px;
+    color: var(--muted);
+    align-self: center;
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat-card .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card .value { font-size: 22px; font-weight: 600; }
+  .stat-card .range { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; }
+  .chart-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .chart-controls select { min-width: 120px; font-size: 13px; padding: 6px 8px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  tr:hover td { background: #f9fafb; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .badge.Very.Low, .badge[data-risk="Very Low"] { background: var(--very-low); }
+  .badge[data-risk="Low"] { background: var(--low); }
+  .badge[data-risk="Medium"] { background: var(--medium); }
+  .badge[data-risk="High"] { background: var(--high); }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    font-size: 13px;
+  }
+  .pagination button {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+  }
+  .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .table-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Health Data Dashboard</h1>
+  <p>Exploring 1,200 patient health records</p>
+</header>
+
+<div class="container">
+
+  <div class="filters">
+    <label>Gender
+      <select id="genderFilter">
+        <option value="All">All</option>
+        {% for g in genders %}
+        <option value="{{ g }}">{{ g }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Risk Level
+      <select id="riskFilter">
+        <option value="All">All</option>
+        {% for r in risk_levels %}
+        <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="record-count" id="recordCount"></div>
+  </div>
+
+  <div class="stat-grid" id="statGrid"></div>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>Risk Level Breakdown</h2>
+      <canvas id="riskChart" height="220"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Scatter Plot</h2>
+      <div class="chart-controls">
+        <select id="xField"></select>
+        <span style="align-self:center; color:#6b7280; font-size:12px;">vs</span>
+        <select id="yField"></select>
+      </div>
+      <canvas id="scatterChart" height="220"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Records</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Age</th><th>Gender</th><th>BMI</th><th>Heart Rate</th>
+            <th>BP</th><th>Sleep (hrs)</th><th>Steps</th><th>Calories</th>
+            <th>Health Score</th><th>Risk</th>
+          </tr>
+        </thead>
+        <tbody id="recordsBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="prevPage">Previous</button>
+      <span id="pageInfo"></span>
+      <button id="nextPage">Next</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const NUMERIC_FIELDS = [
+  "Age", "Height_cm", "Weight_kg", "BMI", "Heart_Rate_bpm",
+  "BP_Systolic", "BP_Diastolic", "Body_Temp_F", "Sleep_Hours",
+  "Water_Intake_Glasses", "Daily_Steps", "Calories_Burned", "Health_Score"
+];
+
+const RISK_COLORS = {
+  "Very Low": "#10b981",
+  "Low": "#3b82f6",
+  "Medium": "#f59e0b",
+  "High": "#ef4444"
+};
+
+let currentPage = 1;
+let totalPages = 1;
+let riskChart, scatterChart;
+
+const genderFilter = document.getElementById("genderFilter");
+const riskFilter = document.getElementById("riskFilter");
+const xFieldSelect = document.getElementById("xField");
+const yFieldSelect = document.getElementById("yField");
+
+function populateFieldSelects() {
+  NUMERIC_FIELDS.forEach(f => {
+    const opt1 = document.createElement("option");
+    opt1.value = f; opt1.textContent = f.replace(/_/g, " ");
+    xFieldSelect.appendChild(opt1);
+
+    const opt2 = document.createElement("option");
+    opt2.value = f; opt2.textContent = f.replace(/_/g, " ");
+    yFieldSelect.appendChild(opt2);
+  });
+  xFieldSelect.value = "Daily_Steps";
+  yFieldSelect.value = "Health_Score";
+}
+
+function currentFilters() {
+  return {
+    gender: genderFilter.value,
+    risk: riskFilter.value
+  };
+}
+
+async function loadSummary() {
+  const { gender, risk } = currentFilters();
+  const params = new URLSearchParams({ gender, risk });
+  const res = await fetch(`/api/summary?${params}`);
+  const data = await res.json();
+
+  document.getElementById("recordCount").textContent = `${data.count} records`;
+
+  const statGrid = document.getElementById("statGrid");
+  statGrid.innerHTML = "";
+  const keyStats = ["BMI", "Heart_Rate_bpm", "Sleep_Hours", "Daily_Steps", "Calories_Burned", "Health_Score"];
+  keyStats.forEach(field => {
+    if (!data[field]) return;
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    card.innerHTML = `
+      <div class="label">${field.replace(/_/g, " ")}</div>
+      <div class="value">${data[field].avg}</div>
+      <div class="range">min ${data[field].min} &middot; max ${data[field].max}</div>
+    `;
+    statGrid.appendChild(card);
+  });
+
+  drawRiskChart(data.risk_breakdown || {});
+}
+
+function drawRiskChart(breakdown) {
+  const ctx = document.getElementById("riskChart");
+  const labels = Object.keys(breakdown);
+  const values = Object.values(breakdown);
+  const colors = labels.map(l => RISK_COLORS[l] || "#9ca3af");
+
+  if (riskChart) riskChart.destroy();
+  riskChart = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }]
+    },
+    options: {
+      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 12 } } } }
+    }
+  });
+}
+
+async function loadScatter() {
+  const { gender, risk } = currentFilters();
+  const x = xFieldSelect.value;
+  const y = yFieldSelect.value;
+  const params = new URLSearchParams({ gender, risk, x, y });
+  const res = await fetch(`/api/scatter?${params}`);
+  const data = await res.json();
+
+  const byRisk = {};
+  data.points.forEach(p => {
+    if (!byRisk[p.risk]) byRisk[p.risk] = [];
+    byRisk[p.risk].push({ x: p.x, y: p.y });
+  });
+
+  const datasets = Object.entries(byRisk).map(([risk, points]) => ({
+    label: risk,
+    data: points,
+    backgroundColor: RISK_COLORS[risk] || "#9ca3af",
+    pointRadius: 3
+  }));
+
+  const ctx = document.getElementById("scatterChart");
+  if (scatterChart) scatterChart.destroy();
+  scatterChart = new Chart(ctx, {
+    type: "scatter",
+    data: { datasets },
+    options: {
+      scales: {
+        x: { title: { display: true, text: x.replace(/_/g, " ") } },
+        y: { title: { display: true, text: y.replace(/_/g, " ") } }
+      },
+      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 12 } } } }
+    }
+  });
+}
+
+async function loadRecords(page = 1) {
+  const { gender, risk } = currentFilters();
+  const params = new URLSearchParams({ gender, risk, page, per_page: 25 });
+  const res = await fetch(`/api/records?${params}`);
+  const data = await res.json();
+
+  currentPage = data.page;
+  totalPages = data.total_pages;
+
+  const tbody = document.getElementById("recordsBody");
+  tbody.innerHTML = "";
+  data.records.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.Age}</td>
+      <td>${r.Gender}</td>
+      <td>${r.BMI}</td>
+      <td>${r.Heart_Rate_bpm}</td>
+      <td>${r.BP_Systolic}/${r.BP_Diastolic}</td>
+      <td>${r.Sleep_Hours}</td>
+      <td>${r.Daily_Steps}</td>
+      <td>${r.Calories_Burned}</td>
+      <td>${r.Health_Score}</td>
+      <td><span class="badge" data-risk="${r.Risk_Level}">${r.Risk_Level}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("pageInfo").textContent = `Page ${currentPage} of ${totalPages} (${data.total} total)`;
+  document.getElementById("prevPage").disabled = currentPage <= 1;
+  document.getElementById("nextPage").disabled = currentPage >= totalPages;
+}
+
+function refreshAll() {
+  loadSummary();
+  loadScatter();
+  loadRecords(1);
+}
+
+genderFilter.addEventListener("change", refreshAll);
+riskFilter.addEventListener("change", refreshAll);
+xFieldSelect.addEventListener("change", loadScatter);
+yFieldSelect.addEventListener("change", loadScatter);
+document.getElementById("prevPage").addEventListener("click", () => {
+  if (currentPage > 1) loadRecords(currentPage - 1);
+});
+document.getElementById("nextPage").addEventListener("click", () => {
+  if (currentPage < totalPages) loadRecords(currentPage + 1);
+});
+
+populateFieldSelects();
+refreshAll();
+</script>
+
+</body>
+</html>
